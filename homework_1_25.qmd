@@ -347,51 +347,122 @@ You can't have matches without wrestlers. The following link contains the top 10
 ***** Of the top 100, which wrestler has the best win/loss?
 
 ```{python}
+#*** Of the top 100, who has wrestled the most matches?
 import requests
 from bs4 import BeautifulSoup
-import pandas as pd
+from urllib.parse import urlparse, parse_qs, urlencode
 
-def scrape_wrestler_links():
-    """
-    Scrapes the top 100 wrestlers' names and profile links from the main page.
+base_url = "https://www.cagematch.net/"
+
+url = "https://www.cagematch.net/?id=2&view=statistics"
+
+wrestler_matches = []
+
+response = requests.get(url)
+soup = BeautifulSoup(response.text, 'html.parser')
+
+gimmick_links = soup.find_all('a', href=True)
+wrestler_urls = [base_url + link['href'].replace("&amp;", "&") for link in gimmick_links if 'gimmick=' in link['href']]
+
+for wrestler_url in wrestler_urls:
+    parsed_url = urlparse(wrestler_url)
+    query_params = parse_qs(parsed_url.query)
+
+    query_params.pop('gimmick', None)
+
+    new_query = urlencode(query_params, doseq=True)
+    wrestler_page_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{new_query}&page=22"
+
+    wrestler_response = requests.get(wrestler_page_url)
+    wrestler_soup = BeautifulSoup(wrestler_response.text, 'html.parser')
     
-    Returns:
-        pd.DataFrame: A DataFrame containing wrestler names and profile links.
-    """
-    url = "https://www.cagematch.net/?id=2&view=statistics"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(url, headers=headers)
+    total_matches_section = wrestler_soup.find('div', class_='InformationBoxContents')
     
-    if response.status_code != 200:
-        print("Failed to fetch the main page.")
-        return pd.DataFrame()
+    if total_matches_section:
+        total_matches = int(total_matches_section.text.strip().split()[0]) 
+        wrestler_name = wrestler_url.split('=')[-1]  
+        wrestler_matches.append((wrestler_name, total_matches))
+    else:
+        print(f"Wrestler: {wrestler_url} - Total Matches not found")
 
-    # Parse the page
-    soup = BeautifulSoup(response.content, "html.parser")
-    table = soup.find("table", class_="TBase TableBorderColor")  # Updated class name
-    if not table:
-        print("Table not found!")
-        return pd.DataFrame()
+sorted_wrestlers = sorted(wrestler_matches, key=lambda x: x[1], reverse=True)
 
-    rows = table.find_all("tr", class_=["TRow1", "TRow2"])  # Rows with data
+print("Wrestlers sorted by Total Matches:")
+for wrestler, matches in sorted_wrestlers:
+    print(f"{wrestler}: {matches} matches")
 
-    data = []
-    for row in rows:
-        cols = row.find_all("td")
-        if len(cols) > 1:  # Ensure the row contains data
-            name_tag = cols[1].find("a")  # Link to wrestler's profile
-            if name_tag:
-                name = name_tag.text.strip()
-                link = "https://www.cagematch.net/" + name_tag["href"]
-                data.append({"Wrestler": name, "Profile Link": link})
 
-    return pd.DataFrame(data)
-
-# Scrape wrestler links
-wrestler_links_df = scrape_wrestler_links()
-print(wrestler_links_df.head())
-
+### Ric Flair has wrestled the most matches with 4,999 matches
 ```
+
+```{python}
+##***** Of the top 100, which wrestler has the best win/loss?
+
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse, parse_qs, urlencode
+
+base_url = "https://www.cagematch.net/"
+
+url = "https://www.cagematch.net/?id=2&view=statistics"
+
+wrestler_win_percentages = []
+
+response = requests.get(url)
+soup = BeautifulSoup(response.text, 'html.parser')
+
+print(soup.prettify())  
+
+gimmick_links = soup.find_all('a', href=True)
+wrestler_urls = [base_url + link['href'].replace("&amp;", "&") for link in gimmick_links if 'gimmick=' in link['href']]
+
+print("Wrestler URLs extracted:")
+for url in wrestler_urls:
+    print(url)
+
+for wrestler_url in wrestler_urls:
+    parsed_url = urlparse(wrestler_url)
+    query_params = parse_qs(parsed_url.query)
+
+    query_params.pop('gimmick', None)
+
+    new_query = urlencode(query_params, doseq=True)
+    wrestler_page_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{new_query}&page=22"
+
+    wrestler_response = requests.get(wrestler_page_url)
+    wrestler_soup = BeautifulSoup(wrestler_response.text, 'html.parser')
+
+    win_percentage_section = wrestler_soup.find_all('div', class_='InformationBoxContents')
+
+    for section in win_percentage_section:
+        win_percentage_text = section.text.strip()
+
+        if '(' in win_percentage_text and ')' in win_percentage_text:
+            start = win_percentage_text.find('(') + 1
+            end = win_percentage_text.find(')')
+            win_percentage_str = win_percentage_text[start:end].strip('%') 
+
+            print(f"Extracted win percentage for {wrestler_url}: {win_percentage_str}%")
+
+            try:
+                win_percentage = float(win_percentage_str)  
+                wrestler_name = wrestler_url.split('=')[-1] 
+                wrestler_win_percentages.append((wrestler_name, win_percentage))
+                break 
+            except ValueError:
+                print(f"Error converting win percentage for {wrestler_url}. Got: {win_percentage_str}")
+        else:
+            print(f"Win percentage format not found in div for wrestler: {wrestler_url}")
+
+sorted_wrestlers = sorted(wrestler_win_percentages, key=lambda x: x[1], reverse=True)
+
+print("Wrestlers sorted by Win Percentage:")
+for wrestler, win_percent in sorted_wrestlers:
+    print(f"{wrestler}: {win_percent}% win rate")
+
+### Gene Okerlund has a 100% win rate
+``` 
+
 
 ## Step 5
 
@@ -399,6 +470,15 @@ With all of this work out of the way, we can start getting down to strategy.
 
 First, what talent should WWE pursue? Advise carefully.
 
+The WWE has a large group of talent within the top 100, according to cagematch.com. With this being said, some talents that they can attempt to recruit are Daisuke Sekimoto and Chihiro Hashimoto. Both of these wrestlers have a high number of matches in the top 100, which indicates that they are well-received by the wrestling community. They are both young enough to squeeze many more matches out of them. Additionally, they have high ratings, which further solidifies their standing as top talents. By recruiting these wrestlers, WWE can potentially improve the quality of their matches and shows, which could lead to increased viewership and revenue, especially in the Japanese market which seems to be a strong area for viewership.
+
+
 Second, reconcile what you found in steps 3 and 4 with Netflix's relationship with WWE. Use the data from the following page to help make your case: https://wrestlenomics.com/tv-ratings/
 
+WWE and Netflix have established a robust partnership, with Netflix securing the rights to stream WWE's Monday Night Raw in a deal valued at $5 billion. This substantial investment reflects Netflix's confidence in the value of WWE's content and its broad audience appeal. Despite a decline in WWE's TV ratings over time, the organization's strong global following and the high quality of its matches, as noted on cagematch.com, indicate a resilient fan base. Netflix can capitalize on WWE's popular wrestlers and compelling storylines to draw more viewers and potentially mitigate the trend of falling ratings. This collaboration offers mutual benefits: it extends WWE's global reach and provides Netflix with unique content that attracts a diverse viewership.
+
+
+
 Third, do you have any further recommendations for WWE?
+
+WWE should consider expanding its wrestler roster by recruiting talent from different international promotions, potentially boosting its global appeal and attracting new fans. It's also important for WWE to focus on creating storylines and characters that connect deeply with their audience, making the content more engaging. Moreover, continuing to enhance its digital and streaming capabilities will help WWE reach broader audiences and adapt to new consumption patterns. Implementing these strategies will help WWE maintain its competitive edge and appeal to a broader viewer base.
