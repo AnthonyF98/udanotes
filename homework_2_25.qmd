@@ -1,0 +1,213 @@
+---
+title: "Homework 2"
+author: "Anthony Fernandez"
+format:
+  html:
+    toc: true
+    toc-location: left
+    self-contained: true
+jupyter: python3
+---
+
+## Task 1
+
+We are going to return to the table of the top 100 wrestlers: https://www.cagematch.net/?id=2&view=statistics. Specifically, you are going to get the ratings/comments tables for each wrestler.
+
+
+
+
+
+```{python}
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse, parse_qs, urlencode
+
+
+base_url = "https://www.cagematch.net/"
+
+url = "https://www.cagematch.net/?id=2&view=statistics"
+
+wrestler_rating_comments = []
+
+response = requests.get(url)
+soup = BeautifulSoup(response.text, 'html.parser')
+
+print(soup.prettify())
+
+# Extracting the wrestler links
+gimmick_links = soup.find_all('a', href=True)
+wrestler_urls = [base_url + link['href'].replace("&amp;", "&") for link in gimmick_links if 'gimmick=' in link['href']]
+
+# Debugging: Print all extracted wrestler URLs to ensure we are collecting them correctly
+print("Wrestler URLs extracted:")
+for url in wrestler_urls:
+    print(url)
+
+# Looping through each wrestler's URL
+for wrestler_url in wrestler_urls:
+    parsed_url = urlparse(wrestler_url)
+    query_params = parse_qs(parsed_url.query)
+
+    # Remove the 'gimmick' query parameter
+    query_params.pop('gimmick', None)
+
+    # Construct the new URL with page=99 to get the correct wrestler page
+    new_query = urlencode(query_params, doseq=True)
+    wrestler_page_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{new_query}&page=99"
+
+    # Send the request to the wrestler's page
+    wrestler_response = requests.get(wrestler_page_url)
+    wrestler_soup = BeautifulSoup(wrestler_response.text, 'html.parser')
+
+    # Extract rating and comments from the wrestler's page
+    rating_comments_section = wrestler_soup.find_all('div', class_='Comment')
+
+    # Debugging: Print the wrestler's page HTML to inspect the structure (optional)
+    # print(f"HTML for {wrestler_url}:")
+    # print(wrestler_soup.prettify())  # Uncomment this if needed for debugging
+
+    for comment_div in rating_comments_section:
+        # Extracting the comment text
+        comment_text = comment_div.get_text(strip=True)
+
+        # Attempt to extract the rating if it's available within the same div
+        # Assuming the rating is in a specific format (e.g., inside a span with a specific class)
+        rating_span = comment_div.find('span', class_='Rating')  # Modify the class if necessary
+        if rating_span:
+            rating = rating_span.get_text(strip=True)
+        else:
+            rating = 'No rating found'
+
+        # Append the comment and rating to the list
+        wrestler_rating_comments.append({
+            'wrestler_url': wrestler_url,
+            'comment': comment_text,
+            'rating': rating
+        })
+
+# Print out all the extracted ratings and comments
+for entry in wrestler_rating_comments:
+    print(f"Wrestler URL: {entry['wrestler_url']}")
+    print(f"Comment: {entry['comment']}")
+    print(f"Rating: {entry['rating']}")
+    print("-" * 40)
+```
+
+## Task 2
+
+Perform any form of sentiment analysis. What is the relationship between a reviewer's sentiment and their rating?
+
+```{python}
+import nltk
+nltk.download('vader_lexicon')
+
+from textblob import TextBlob
+
+# Example function to get sentiment using TextBlob
+def get_sentiment(text):
+    # Create a TextBlob object
+    blob = TextBlob(text)
+    # Return the polarity
+    return blob.sentiment.polarity
+
+# Updated loop to include sentiment analysis
+for entry in wrestler_rating_comments:
+    comment = entry['comment']
+    sentiment = get_sentiment(comment)
+    entry['sentiment'] = sentiment  # Storing sentiment in the dictionary
+
+    print(f"Wrestler URL: {entry['wrestler_url']}")
+    print(f"Comment: {comment}")
+    print(f"Rating: {entry['rating']}")
+    print(f"Sentiment: {sentiment}")  # Displaying sentiment
+    print("-" * 40)
+
+import pandas as pd
+
+# Create a DataFrame from the list of dictionaries
+df = pd.DataFrame(wrestler_rating_comments)
+
+# Convert ratings to numeric values, handle errors for non-numeric data
+df['numeric_rating'] = pd.to_numeric(df['rating'], errors='coerce')
+
+# Calculate correlation between sentiment and numeric ratings
+correlation = df['sentiment'].corr(df['numeric_rating'])
+print("Correlation between sentiment and rating:", correlation)
+
+```
+
+```{python}
+import pandas as pd
+
+# Save DataFrame to CSV
+df.to_csv("df.csv", index=False)
+```
+
+## Task 3
+
+Perform any type of topic modeling on the comments. What are the main topics of the comments? How can you use those topics to understand what people value?
+
+```{python}
+import pandas as pd
+from langdetect import detect, DetectorFactory
+
+DetectorFactory.seed = 0  # Ensures consistent results
+
+# Load the CSV file
+file_path = "C:/Users/antfe/OneDrive/Documents/GitHub/udanotes/df.csv"
+df = pd.read_csv(file_path)
+
+# Function to detect language
+def is_german(text):
+    try:
+        return detect(text) == "de"
+    except:
+        return False  # In case of errors
+
+# Apply to all text columns and drop German rows
+df_cleaned = df[~df.astype(str).applymap(is_german).any(axis=1)]
+
+
+```
+
+
+
+```{python}
+import re
+from sklearn.decomposition import LatentDirichletAllocation
+from sklearn.feature_extraction.text import CountVectorizer
+
+# Sample data
+documents = df_cleaned['comment']  # Assuming df is your DataFrame and 'comment' is the column with text
+
+# Function to preprocess the text by removing numbers
+def preprocess_text(text):
+    # Remove numbers and any unwanted characters (e.g., special characters)
+    text = re.sub(r'\d+', '', text)  # Remove digits
+    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
+    text = text.lower()  # Optional: Convert to lowercase
+    return text
+
+# Apply preprocessing to the documents
+documents_clean = documents.apply(preprocess_text)
+
+# Vectorize the documents with CountVectorizer (exclude numbers and other unwanted tokens)
+vectorizer = CountVectorizer(max_df=0.95, min_df=2, stop_words='english')
+dtm = vectorizer.fit_transform(documents_clean)
+
+# Fit the LDA model
+lda = LatentDirichletAllocation(n_components=5, random_state=0)
+lda.fit(dtm)
+
+# Function to display topics
+def display_topics(model, feature_names, no_top_words):
+    for topic_idx, topic in enumerate(model.components_):
+        print(f"Topic {topic_idx}:")
+        # Display the top words for each topic
+        print(" ".join([feature_names[i] for i in topic.argsort()[:-no_top_words - 1:-1]]))
+
+# Display the topics
+display_topics(lda, vectorizer.get_feature_names_out(), 10)
+
+```
+
