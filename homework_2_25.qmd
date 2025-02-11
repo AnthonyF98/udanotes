@@ -136,6 +136,9 @@ print("Correlation between sentiment and rating:", correlation)
 
 ```
 
+From what I found, the sentiment is above 0.0 if the rating is higher than 5.0. But the correlation between sentiment and rating is not very strong. This could be due to the specificity of sentiment analysis and the subjectivity and minimal vocabulary differences in ratings.
+
+
 ```{python}
 import pandas as pd
 
@@ -211,3 +214,4 @@ display_topics(lda, vectorizer.get_feature_names_out(), 10)
 
 ```
 
+Due to the nature of the comments, the topics are not very clear. We can see that the topics are related to excietment over the wrestlers' performances. This information can be used to understand what aspects of wrestling people value the most, such as the wrestlers' skills, entertainment value, and overall performance in the events they are in.
